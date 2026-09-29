@@ -2,8 +2,8 @@ name: Update ICS
 
 on:
   repository_dispatch:
-  workflow_dispatch:
     types: [update_ics]
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -18,9 +18,9 @@ jobs:
 
       - name: Update availability.ics
         env:
-          ICS_BASE64: ${{ github.event.client_payload.ics_base64 }}
+          ICS_URL: ${{ github.event.client_payload.ics_url }}
         run: |
-          printf '%s' "$ICS_BASE64" | base64 --decode > availability.ics
+          curl -L "$ICS_URL" -o availability.ics
 
       - name: Commit and push
         run: |
