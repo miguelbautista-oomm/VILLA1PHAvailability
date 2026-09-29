@@ -16,16 +16,17 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Update availability.ics
+      - name: Update Daily Availability.ics
         env:
           ICS_URL: ${{ github.event.client_payload.ics_url }}
         run: |
-          curl -L "$ICS_URL" -o availability.ics
+          curl -L -A "Mozilla/5.0" "$ICS_URL" -o "Daily Availability.ics"
 
       - name: Commit and push
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add availability.ics
-          git diff --cached --quiet || git commit -m "Update availability ICS"
+          git add "Daily Availability.ics"
+          git rm --cached availability.ics 2>/dev/null || true
+          git diff --cached --quiet || git commit -m "Update Daily Availability ICS"
           git push
