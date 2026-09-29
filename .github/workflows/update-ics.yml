@@ -1,0 +1,30 @@
+name: Update ICS
+
+on:
+  repository_dispatch:
+    types: [update_ics]
+
+permissions:
+  contents: write
+
+jobs:
+  update-ics:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Update availability.ics
+        env:
+          ICS_BASE64: ${{ github.event.client_payload.ics_base64 }}
+        run: |
+          printf '%s' "$ICS_BASE64" | base64 --decode > availability.ics
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add availability.ics
+          git diff --cached --quiet || git commit -m "Update availability ICS"
+          git push
