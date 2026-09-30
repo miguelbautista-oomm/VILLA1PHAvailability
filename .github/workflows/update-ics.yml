@@ -7,13 +7,8 @@ on:
 permissions:
   contents: write
 
-concurrency:
-  group: update-ics
-  queue: max
-  cancel-in-progress: false
-
 jobs:
-  update-ics:
+  save-chunk:
     runs-on: ubuntu-latest
 
     steps:
@@ -24,56 +19,26 @@ jobs:
         env:
           CHUNK: ${{ github.event.client_payload.chunk }}
           CHUNK_INDEX: ${{ github.event.client_payload.chunk_index }}
+          UPDATE_ID: ${{ github.event.client_payload.update_id }}
           TOTAL_CHUNKS: ${{ github.event.client_payload.total_chunks }}
         run: |
-          if [ "$CHUNK_INDEX" = "0" ]; then
-            rm -rf chunks
-          fi
+          BRANCH="ics-chunk/${UPDATE_ID}/${CHUNK_INDEX}"
 
-          mkdir -p chunks
+          echo "Creating branch: $BRANCH"
 
-          printf '%s' "$CHUNK" > "chunks/${CHUNK_INDEX}.txt"
+          git switch -c "$BRANCH"
 
-          echo "Saved chunk $((CHUNK_INDEX + 1)) of $TOTAL_CHUNKS"
+          mkdir -p "chunks/${UPDATE_ID}"
 
-      - name: Rebuild ICS when all chunks arrive
-        env:
-          TOTAL_CHUNKS: ${{ github.event.client_payload.total_chunks }}
-        run: |
-          RECEIVED=$(find chunks -type f -name '*.txt' | wc -l)
+          printf '%s' "$CHUNK" > "chunks/${UPDATE_ID}/${CHUNK_INDEX}.txt"
 
-          echo "Received: $RECEIVED / $TOTAL_CHUNKS"
-
-          if [ "$RECEIVED" -eq "$TOTAL_CHUNKS" ]; then
-            echo "All chunks received."
-            echo "Rebuilding Daily Availability.ics..."
-
-            find chunks -type f -name '*.txt' -print0 \
-              | sort -zV \
-              | xargs -0 cat > combined.b64
-
-            base64 --decode combined.b64 > "Daily Availability.ics"
-
-            rm -rf chunks
-            rm -f combined.b64
-
-            echo "ICS file rebuilt successfully."
-          else
-            echo "Waiting for remaining chunks..."
-          fi
-
-      - name: Commit and push
-        run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git rm -f availability.ics 2>/dev/null || true
+          git add "chunks/${UPDATE_ID}/${CHUNK_INDEX}.txt"
 
-          git add -A
+          git commit -m "Save ICS chunk ${CHUNK_INDEX} of ${TOTAL_CHUNKS}"
 
-          if git diff --cached --quiet; then
-            echo "Nothing to commit."
-          else
-            git commit -m "Update Daily Availability ICS"
-            git push
-          fi
+          git push origin "$BRANCH"
+
+          echo "Chunk saved successfully."
