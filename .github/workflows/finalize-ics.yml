@@ -1,0 +1,58 @@
+name: Finalize ICS
+
+on:
+  repository_dispatch:
+    types: [finalize_ics]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: finalize-ics
+  cancel-in-progress: false
+
+jobs:
+  finalize-ics:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Rebuild ICS
+        env:
+          UPDATE_ID: ${{ github.event.client_payload.update_id }}
+          TOTAL_CHUNKS: ${{ github.event.client_payload.total_chunks }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Update ID: $UPDATE_ID"
+          echo "Total chunks: $TOTAL_CHUNKS"
+
+          git fetch origin "+refs/heads/ics-chunk/${UPDATE_ID}/*:refs/remotes/origin/ics-chunk/${UPDATE_ID}/*"
+
+          rm -f combined.b64
+
+          for ((i=0; i<TOTAL_CHUNKS; i++)); do
+            echo "Reading chunk $i..."
+            git show "origin/ics-chunk/${UPDATE_ID}/${i}:chunks/${UPDATE_ID}/${i}.txt" >> combined.b64
+          done
+
+          base64 --decode combined.b64 > "Daily Availability.ics"
+
+          echo "ICS rebuilt successfully."
+
+      - name: Commit and push to main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add "Daily Availability.ics"
+
+          if git diff --cached --quiet; then
+            echo "Nothing to commit."
+          else
+            git commit -m "Update Daily Availability ICS"
+            git push origin main
+          fi
