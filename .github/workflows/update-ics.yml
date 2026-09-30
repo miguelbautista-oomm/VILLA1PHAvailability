@@ -3,13 +3,13 @@ name: Update ICS
 on:
   repository_dispatch:
     types: [update_ics]
-  workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
   group: update-ics
+  queue: max
   cancel-in-progress: false
 
 jobs:
@@ -31,11 +31,13 @@ jobs:
           fi
 
           mkdir -p chunks
+
           printf '%s' "$CHUNK" > "chunks/${CHUNK_INDEX}.txt"
+
+          echo "Saved chunk $((CHUNK_INDEX + 1)) of $TOTAL_CHUNKS"
 
       - name: Rebuild ICS when all chunks arrive
         env:
-          CHUNK_INDEX: ${{ github.event.client_payload.chunk_index }}
           TOTAL_CHUNKS: ${{ github.event.client_payload.total_chunks }}
         run: |
           RECEIVED=$(find chunks -type f -name '*.txt' | wc -l)
@@ -43,7 +45,8 @@ jobs:
           echo "Received: $RECEIVED / $TOTAL_CHUNKS"
 
           if [ "$RECEIVED" -eq "$TOTAL_CHUNKS" ]; then
-            echo "All chunks received. Rebuilding ICS..."
+            echo "All chunks received."
+            echo "Rebuilding Daily Availability.ics..."
 
             find chunks -type f -name '*.txt' -print0 \
               | sort -zV \
@@ -53,6 +56,8 @@ jobs:
 
             rm -rf chunks
             rm -f combined.b64
+
+            echo "ICS file rebuilt successfully."
           else
             echo "Waiting for remaining chunks..."
           fi
@@ -61,6 +66,8 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git rm -f availability.ics 2>/dev/null || true
 
           git add -A
 
