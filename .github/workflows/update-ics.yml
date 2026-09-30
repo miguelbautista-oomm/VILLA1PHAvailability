@@ -10,7 +10,6 @@ permissions:
 
 concurrency:
   group: update-ics
-  queue: max
   cancel-in-progress: false
 
 jobs:
@@ -25,14 +24,49 @@ jobs:
         env:
           CHUNK: ${{ github.event.client_payload.chunk }}
           CHUNK_INDEX: ${{ github.event.client_payload.chunk_index }}
+          TOTAL_CHUNKS: ${{ github.event.client_payload.total_chunks }}
         run: |
+          if [ "$CHUNK_INDEX" = "0" ]; then
+            rm -rf chunks
+          fi
+
           mkdir -p chunks
           printf '%s' "$CHUNK" > "chunks/${CHUNK_INDEX}.txt"
 
-      - name: Commit chunk
+      - name: Rebuild ICS when all chunks arrive
+        env:
+          CHUNK_INDEX: ${{ github.event.client_payload.chunk_index }}
+          TOTAL_CHUNKS: ${{ github.event.client_payload.total_chunks }}
+        run: |
+          RECEIVED=$(find chunks -type f -name '*.txt' | wc -l)
+
+          echo "Received: $RECEIVED / $TOTAL_CHUNKS"
+
+          if [ "$RECEIVED" -eq "$TOTAL_CHUNKS" ]; then
+            echo "All chunks received. Rebuilding ICS..."
+
+            find chunks -type f -name '*.txt' -print0 \
+              | sort -zV \
+              | xargs -0 cat > combined.b64
+
+            base64 --decode combined.b64 > "Daily Availability.ics"
+
+            rm -rf chunks
+            rm -f combined.b64
+          else
+            echo "Waiting for remaining chunks..."
+          fi
+
+      - name: Commit and push
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add chunks/
-          git diff --cached --quiet || git commit -m "Add ICS chunk"
-          git push
+
+          git add -A
+
+          if git diff --cached --quiet; then
+            echo "Nothing to commit."
+          else
+            git commit -m "Update Daily Availability ICS"
+            git push
+          fi
